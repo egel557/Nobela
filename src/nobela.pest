@@ -1,0 +1,32 @@
+null = { "null" }
+bool = { "true" | "false" }
+char = {
+    !("\"" | "\\") ~ ANY
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+inner = @{ char* }
+string = ${ "\"" ~ inner ~ "\"" }
+
+value = { null | bool | string }
+
+WHITESPACE = _{ " " }
+COMMENT = _{ "//" ~ (!NEWLINE ~ ANY)* }
+
+eol = _{ NEWLINE ~ ("\t"* ~ NEWLINE)* }
+
+indent = _{ PEEK_ALL ~ PUSH("\t") }
+
+speaker = { string }
+text = { string }
+
+dialogue = { ((speaker ~ text) | (text)) ~ (eol ~ PEEK_ALL ~ choice)*}
+
+
+statement = _{ dialogue }
+
+choice = { "--" ~ text ~ (eol ~ children)?}
+	
+children = _{ indent ~ statement ~ (eol ~ PEEK_ALL ~ statement)* ~ DROP}
+timeline = _{ statement ~ (NEWLINE ~ statement)* }
+document = _{ SOI ~ eol? ~  timeline ~ eol? ~ "\t"* ~ EOI }
