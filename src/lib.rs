@@ -13,7 +13,7 @@ pub struct NobelaParser;
 
 #[derive(Debug)]
 pub enum FlatStmt {
-    Dialogue { speaker: String, text: String },
+    Dialogue { speaker: Option<String>, text: String },
     EndDialogue,
     Choice { text: String },
     EndChoice,
@@ -21,7 +21,7 @@ pub enum FlatStmt {
 #[derive(Debug)]
 pub enum NestedStmt {
     Dialogue {
-        speaker: String,
+        speaker: Option<String>,
         text: String,
         choices: Vec<NestedStmt>,
     },
@@ -64,12 +64,12 @@ pub fn parse_flat(input: &str) -> Result<Vec<FlatStmt>, pest::error::Error<Rule>
 fn nested_dialogue_pair(pair: Pair<Rule>) -> NestedStmt {
     let mut choices = Vec::new();
 
-    let mut speaker = String::new();
+    let mut speaker = None;
     let mut text = String::new();
 
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
-            Rule::speaker => speaker = get_string_val(inner_pair),
+            Rule::speaker => speaker = Some(get_string_val(inner_pair)),
             Rule::text => text = get_string_val(inner_pair),
             Rule::choice => {
                 choices.push(nested_choice_pair(inner_pair));
@@ -109,12 +109,12 @@ fn flat_dialogue_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
     let mut statements = Vec::new();
     let mut choices = Vec::new();
 
-    let mut speaker = String::new();
+    let mut speaker = None;
     let mut text = String::new();
 
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
-            Rule::speaker => speaker = get_string_val(inner_pair),
+            Rule::speaker => speaker = Some(get_string_val(inner_pair)),
             Rule::text => text = get_string_val(inner_pair),
             Rule::choice => {
                 choices.append(&mut flat_choice_pair(inner_pair));
