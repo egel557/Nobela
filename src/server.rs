@@ -6,7 +6,7 @@ pub enum Event {
     Dialogue {
         speaker: Option<String>,
         text: String,
-        choices: Vec<String>,
+        choices: Vec<(String, bool)>,
     },
     Ignore,
 }
@@ -90,8 +90,17 @@ impl Iterator for Server<'_> {
                         choices: choices
                             .into_iter()
                             .map(|c| {
-                                if let FlatStmt::Choice { text, .. } = c {
-                                    text.to_owned()
+                                if let FlatStmt::Choice { text, condition } = c {
+                                    let hide = match condition {
+                                        Some(condition) => {
+                                            !eval_boolean_with_context(condition, self.context)
+                                                .unwrap_or_else(|_| {
+                                                    panic!("Error evaluating '{condition}'")
+                                                })
+                                        }
+                                        None => false,
+                                    };
+                                    (text.to_owned(), hide)
                                 } else {
                                     unreachable!()
                                 }

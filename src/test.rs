@@ -1,5 +1,3 @@
-use evalexpr::{context_map, eval, eval_with_context, Value};
-
 use super::*;
 
 #[test]
@@ -54,11 +52,13 @@ fn test_flat_dialogue_pair() {
                 text: "Hello world!".to_owned()
             },
             FlatStmt::Choice {
-                text: "First".to_owned()
+                text: "First".to_owned(),
+                condition: None,
             },
             FlatStmt::EndChoice,
             FlatStmt::Choice {
-                text: "Second".to_owned()
+                text: "Second".to_owned(),
+                condition: None,
             },
             FlatStmt::EndChoice,
             FlatStmt::EndDialogue
@@ -77,7 +77,40 @@ fn test_flat_choice_pair() {
         ),
         vec![
             FlatStmt::Choice {
-                text: "This is a choice.".to_owned()
+                text: "This is a choice.".to_owned(),
+                condition: None,
+            },
+            FlatStmt::EndChoice
+        ]
+    );
+
+    assert_eq!(
+        flat_choice_pair(
+            NobelaParser::parse(Rule::choice, r#"-- "This is a choice." if true"#)
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        vec![
+            FlatStmt::Choice {
+                text: "This is a choice.".to_owned(),
+                condition: Some("true".to_owned()),
+            },
+            FlatStmt::EndChoice
+        ]
+    );
+
+    assert_eq!(
+        flat_choice_pair(
+            NobelaParser::parse(Rule::choice, r#"-- "This is a choice." only if true"#)
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        vec![
+            FlatStmt::Choice {
+                text: "This is a choice.".to_owned(),
+                condition: Some("true".to_owned()),
             },
             FlatStmt::EndChoice
         ]
@@ -97,7 +130,8 @@ fn test_flat_choice_pair() {
         ),
         vec![
             FlatStmt::Choice {
-                text: "This is a choice.".to_owned()
+                text: "This is a choice.".to_owned(),
+                condition: None,
             },
             FlatStmt::Dialogue {
                 speaker: None,

@@ -24,6 +24,7 @@ pub enum FlatStmt {
     EndDialogue,
     Choice {
         text: String,
+        condition: Option<String>,
     },
     EndChoice,
     If {
@@ -104,6 +105,7 @@ fn nested_choice_pair(pair: Pair<Rule>) -> NestedStmt {
         match inner_pair.as_rule() {
             Rule::text => text = get_string_val(inner_pair),
             Rule::dialogue => children.push(nested_dialogue_pair(inner_pair)),
+
             _ => (),
         }
     }
@@ -127,6 +129,7 @@ fn flat_dialogue_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
         match inner_pair.as_rule() {
             Rule::speaker => speaker = Some(get_string_val(inner_pair)),
             Rule::text => text = get_string_val(inner_pair),
+
             Rule::choice => {
                 choices.append(&mut flat_choice_pair(inner_pair));
             }
@@ -144,15 +147,17 @@ fn flat_choice_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
     let mut statements = Vec::new();
     let mut children = Vec::new();
     let mut text = String::new();
+    let mut condition = None;
 
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::text => text = get_string_val(inner_pair),
+            Rule::bool_expr => condition = Some(inner_pair.as_str().to_owned()),
             _ => children.append(&mut flat_events_pair(inner_pair)),
         }
     }
 
-    statements.push(FlatStmt::Choice { text });
+    statements.push(FlatStmt::Choice { text, condition });
 
     statements.append(&mut children);
     statements.push(FlatStmt::EndChoice);

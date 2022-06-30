@@ -36,8 +36,7 @@ dialogue = { ((speaker ~ text) | (text)) ~ (eol ~ PEEK_ALL ~ choice)*}
 
 
 statement = _{ dialogue | if_stmt }
-
-choice = { "--" ~ text ~ (eol ~ children)?}
+choice = { "--" ~ text ~ ("if" ~ bool_expr)? ~ (eol ~ children)?}
 
 if_stmt = { "if" ~ bool_expr ~ ":" ~ (eol ~ children)?}
 	
