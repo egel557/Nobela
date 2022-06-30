@@ -7,15 +7,22 @@ use pest::{
     Parser, RuleType,
 };
 
+pub mod server;
+
 #[derive(Parser)]
 #[grammar = "nobela.pest"]
 pub struct NobelaParser;
 
 #[derive(Debug)]
 pub enum FlatStmt {
-    Dialogue { speaker: Option<String>, text: String },
+    Dialogue {
+        speaker: Option<String>,
+        text: String,
+    },
     EndDialogue,
-    Choice { text: String },
+    Choice {
+        text: String,
+    },
     EndChoice,
 }
 #[derive(Debug)]
