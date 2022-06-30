@@ -8,12 +8,14 @@ use pest::{
 };
 
 pub mod server;
+#[cfg(test)]
+pub mod test;
 
 #[derive(Parser)]
 #[grammar = "nobela.pest"]
 pub struct NobelaParser;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum FlatStmt {
     Dialogue {
         speaker: Option<String>,
@@ -24,6 +26,10 @@ pub enum FlatStmt {
         text: String,
     },
     EndChoice,
+    // If {
+    // 	condition: String,
+    // },
+    // EndIf
 }
 #[derive(Debug)]
 pub enum NestedStmt {
@@ -157,43 +163,43 @@ fn flat_choice_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
     statements
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    #[test]
-    fn parse_document() {
-        let output = document(
-            r#"
-"Elira" "Hello World"
--- "First"
-	"In first"
-	-- "Nested choice"
-	"In first again"
--- "Second"
--- "Third"
-"Another one"
-"#,
-        )
-        .unwrap();
-        println!("{:#?}", output);
-    }
+//     #[test]
+//     fn parse_document() {
+//         let output = document(
+//             r#"
+// "Elira" "Hello World"
+// -- "First"
+// 	"In first"
+// 	-- "Nested choice"
+// 	"In first again"
+// -- "Second"
+// -- "Third"
+// "Another one"
+// "#,
+//         )
+//         .unwrap();
+//         println!("{:#?}", output);
+//     }
 
-    #[test]
-    fn parse_into_statements() {
-        let output = parse_flat(
-            r#"
-"Elira" "Hello World"
--- "First"
-	"In first"
-	-- "Nested choice"
-	"In first again"
--- "Second"
--- "Third"
-"Another one"
-"#,
-        )
-        .unwrap();
-        println!("{:#?}", output);
-    }
-}
+//     #[test]
+//     fn parse_into_statements() {
+//         let output = parse_flat(
+//             r#"
+// "Elira" "Hello World"
+// -- "First"
+// 	"In first"
+// 	-- "Nested choice"
+// 	"In first again"
+// -- "Second"
+// -- "Third"
+// "Another one"
+// "#,
+//         )
+//         .unwrap();
+//         println!("{:#?}", output);
+//     }
+// }

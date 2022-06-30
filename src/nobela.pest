@@ -7,8 +7,20 @@ char = {
 }
 inner = @{ char* }
 string = ${ "\"" ~ inner ~ "\"" }
+number = @{
+    "-"?
+    ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*)
+    ~ ("." ~ ASCII_DIGIT*)?
+    ~ (^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+)?
+}
 
-value = { null | bool | string }
+ident = ${ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+value = { null | bool | string | number}
+
+bool_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" }
+arith_op = { "+" | "-" | "*" | "/" }
+expr = { value ~ (arith_op ~ value)+ | value }
+bool_expr = { expr ~ bool_op ~ expr | expr }
 
 WHITESPACE = _{ " " }
 COMMENT = _{ "//" ~ (!NEWLINE ~ ANY)* }
@@ -26,6 +38,8 @@ dialogue = { ((speaker ~ text) | (text)) ~ (eol ~ PEEK_ALL ~ choice)*}
 statement = _{ dialogue }
 
 choice = { "--" ~ text ~ (eol ~ children)?}
+
+if_stmt = { "if" ~ expr ~ ":" ~ (eol ~ children)?}
 	
 children = _{ indent ~ statement ~ (eol ~ PEEK_ALL ~ statement)* ~ DROP}
 timeline = _{ statement ~ (NEWLINE ~ statement)* }
