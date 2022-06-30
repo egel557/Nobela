@@ -165,8 +165,6 @@ fn flat_if_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
     let mut children = Vec::new();
     let mut condition = String::new();
 
-    println!("{:#?}", pair);
-
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::bool_expr => condition = inner_pair.as_str().to_owned(),

@@ -15,7 +15,7 @@ number = @{
 }
 
 ident = ${ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-value = { null | bool | string | number}
+value = { null | bool | string | number | ident}
 
 bool_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" }
 arith_op = { "+" | "-" | "*" | "/" }
@@ -35,7 +35,7 @@ text = { string }
 dialogue = { ((speaker ~ text) | (text)) ~ (eol ~ PEEK_ALL ~ choice)*}
 
 
-statement = _{ dialogue }
+statement = _{ dialogue | if_stmt }
 
 choice = { "--" ~ text ~ (eol ~ children)?}
 

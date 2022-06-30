@@ -1,3 +1,5 @@
+use evalexpr::{context_map, eval, eval_with_context, Value};
+
 use super::*;
 
 #[test]

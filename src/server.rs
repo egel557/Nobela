@@ -1,3 +1,5 @@
+use evalexpr::{eval_boolean_with_context, HashMapContext};
+
 use crate::FlatStmt;
 
 pub enum Event {
@@ -13,14 +15,16 @@ pub struct Server<'a> {
     stmts: &'a Vec<FlatStmt>,
     index: usize,
     choice_indexes: Option<Vec<usize>>,
+    context: &'a HashMapContext,
 }
 
 impl<'a> Server<'a> {
-    pub fn new(stmts: &'a Vec<FlatStmt>, index: usize) -> Self {
+    pub fn new(stmts: &'a Vec<FlatStmt>, index: usize, context: &'a HashMapContext) -> Self {
         Server {
             stmts,
             index,
             choice_indexes: None,
+            context,
         }
     }
 
@@ -72,8 +76,8 @@ impl Iterator for Server<'_> {
                                     nested_count -= 1
                                 }
                             }
-                            FlatStmt::If { condition } => todo!(),
-                            FlatStmt::EndIf => todo!(),
+                            FlatStmt::If { .. } => nested_count += 1,
+                            FlatStmt::EndIf => nested_count -= 1,
                         }
                         next_index += 1;
                     }
@@ -95,11 +99,7 @@ impl Iterator for Server<'_> {
                             .collect(),
                     })
                 }
-                FlatStmt::Choice { .. } => {
-                    self.index += 1;
-                    Some(Event::Ignore)
-                }
-                FlatStmt::EndDialogue => {
+                FlatStmt::Choice { .. } | FlatStmt::EndDialogue | FlatStmt::EndIf => {
                     self.index += 1;
                     Some(Event::Ignore)
                 }
@@ -111,7 +111,6 @@ impl Iterator for Server<'_> {
                     if matches!(next_event, FlatStmt::Choice { .. }) {
                         loop {
                             match next_event {
-                                FlatStmt::Dialogue { .. } => nested_count += 1,
                                 FlatStmt::EndDialogue => {
                                     if nested_count > 0 {
                                         nested_count -= 1
@@ -119,10 +118,10 @@ impl Iterator for Server<'_> {
                                         break;
                                     }
                                 }
-                                FlatStmt::Choice { .. } => nested_count += 1,
-                                FlatStmt::EndChoice => nested_count -= 1,
-                                FlatStmt::If { condition } => todo!(),
-                                FlatStmt::EndIf => todo!(),
+                                FlatStmt::Dialogue { .. }
+                                | FlatStmt::Choice { .. }
+                                | FlatStmt::If { .. } => nested_count += 1,
+                                FlatStmt::EndChoice | FlatStmt::EndIf => nested_count -= 1,
                             }
                             next_index += 1;
                             next_event = &self.stmts[next_index];
@@ -131,8 +130,37 @@ impl Iterator for Server<'_> {
                     self.index = next_index;
                     Some(Event::Ignore)
                 }
-                FlatStmt::If { condition } => todo!(),
-                FlatStmt::EndIf => todo!(),
+                FlatStmt::If { condition } => {
+                    let evaluation = eval_boolean_with_context(condition, self.context)
+                        .unwrap_or_else(|_| panic!("Error evaluating '{condition}'"));
+
+                    if evaluation {
+                        self.index += 1;
+                    } else {
+                        let mut next_index = self.index + 1;
+                        let mut nested_count = 0;
+
+                        loop {
+                            let next = &self.stmts[next_index];
+                            match next {
+                                FlatStmt::Dialogue { .. }
+                                | FlatStmt::Choice { .. }
+                                | FlatStmt::If { .. } => nested_count += 1,
+                                FlatStmt::EndChoice | FlatStmt::EndDialogue => nested_count -= 1,
+                                FlatStmt::EndIf => {
+                                    if nested_count > 0 {
+                                        nested_count -= 1
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                            next_index += 1;
+                        }
+                        self.index = next_index;
+                    }
+                    Some(Event::Ignore)
+                }
             },
             None => None,
         }
