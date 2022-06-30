@@ -26,10 +26,10 @@ pub enum FlatStmt {
         text: String,
     },
     EndChoice,
-    // If {
-    // 	condition: String,
-    // },
-    // EndIf
+    If {
+        condition: String,
+    },
+    EndIf,
 }
 #[derive(Debug)]
 pub enum NestedStmt {
@@ -66,9 +66,7 @@ pub fn parse_flat(input: &str) -> Result<Vec<FlatStmt>, pest::error::Error<Rule>
     let mut statements = Vec::new();
 
     for pair in pairs {
-        if pair.as_rule() == Rule::dialogue {
-            statements.append(&mut flat_dialogue_pair(pair))
-        }
+        statements.append(&mut flat_events_pair(pair))
     }
 
     Ok(statements)
@@ -150,8 +148,7 @@ fn flat_choice_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::text => text = get_string_val(inner_pair),
-            Rule::dialogue => children.append(&mut flat_dialogue_pair(inner_pair)),
-            _ => (),
+            _ => children.append(&mut flat_events_pair(inner_pair)),
         }
     }
 
@@ -163,43 +160,35 @@ fn flat_choice_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
     statements
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+fn flat_if_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
+    let mut statements = Vec::new();
+    let mut children = Vec::new();
+    let mut condition = String::new();
 
-//     #[test]
-//     fn parse_document() {
-//         let output = document(
-//             r#"
-// "Elira" "Hello World"
-// -- "First"
-// 	"In first"
-// 	-- "Nested choice"
-// 	"In first again"
-// -- "Second"
-// -- "Third"
-// "Another one"
-// "#,
-//         )
-//         .unwrap();
-//         println!("{:#?}", output);
-//     }
+    println!("{:#?}", pair);
 
-//     #[test]
-//     fn parse_into_statements() {
-//         let output = parse_flat(
-//             r#"
-// "Elira" "Hello World"
-// -- "First"
-// 	"In first"
-// 	-- "Nested choice"
-// 	"In first again"
-// -- "Second"
-// -- "Third"
-// "Another one"
-// "#,
-//         )
-//         .unwrap();
-//         println!("{:#?}", output);
-//     }
-// }
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::bool_expr => condition = inner_pair.as_str().to_owned(),
+            _ => children.append(&mut flat_events_pair(inner_pair)),
+        }
+    }
+
+    statements.push(FlatStmt::If { condition });
+
+    statements.append(&mut children);
+    statements.push(FlatStmt::EndIf);
+
+    statements
+}
+
+fn flat_events_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
+    let mut statements = Vec::new();
+    match pair.as_rule() {
+        Rule::dialogue => statements = flat_dialogue_pair(pair),
+        Rule::if_stmt => statements = flat_if_pair(pair),
+        _ => (),
+    }
+
+    statements
+}

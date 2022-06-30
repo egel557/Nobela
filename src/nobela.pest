@@ -39,7 +39,7 @@ statement = _{ dialogue }
 
 choice = { "--" ~ text ~ (eol ~ children)?}
 
-if_stmt = { "if" ~ expr ~ ":" ~ (eol ~ children)?}
+if_stmt = { "if" ~ bool_expr ~ ":" ~ (eol ~ children)?}
 	
 children = _{ indent ~ statement ~ (eol ~ PEEK_ALL ~ statement)* ~ DROP}
 timeline = _{ statement ~ (NEWLINE ~ statement)* }

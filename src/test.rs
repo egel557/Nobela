@@ -111,3 +111,59 @@ fn test_flat_choice_pair() {
         ]
     );
 }
+
+#[test]
+fn test_flat_if_pair() {
+    assert_eq!(
+        flat_if_pair(
+            NobelaParser::parse(Rule::if_stmt, r#"if 1 == 1:"#)
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        vec![
+            FlatStmt::If {
+                condition: "1 == 1".to_owned()
+            },
+            FlatStmt::EndIf
+        ]
+    );
+
+    assert_eq!(
+        flat_if_pair(
+            NobelaParser::parse(
+                Rule::if_stmt,
+                r#"if true:
+	"Nested""#
+            )
+            .unwrap()
+            .next()
+            .unwrap()
+        ),
+        vec![
+            FlatStmt::If {
+                condition: "true".to_owned()
+            },
+            FlatStmt::Dialogue {
+                speaker: None,
+                text: "Nested".to_owned()
+            },
+            FlatStmt::EndDialogue,
+            FlatStmt::EndIf
+        ]
+    );
+}
+
+#[test]
+fn test_parse_flat() {
+    assert_eq!(
+        parse_flat(r#""Hello World""#).unwrap(),
+        vec![
+            FlatStmt::Dialogue {
+                speaker: None,
+                text: "Hello World".to_owned()
+            },
+            FlatStmt::EndDialogue,
+        ]
+    );
+}

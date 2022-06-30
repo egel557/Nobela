@@ -72,6 +72,8 @@ impl Iterator for Server<'_> {
                                     nested_count -= 1
                                 }
                             }
+                            FlatStmt::If { condition } => todo!(),
+                            FlatStmt::EndIf => todo!(),
                         }
                         next_index += 1;
                     }
@@ -119,6 +121,8 @@ impl Iterator for Server<'_> {
                                 }
                                 FlatStmt::Choice { .. } => nested_count += 1,
                                 FlatStmt::EndChoice => nested_count -= 1,
+                                FlatStmt::If { condition } => todo!(),
+                                FlatStmt::EndIf => todo!(),
                             }
                             next_index += 1;
                             next_event = &self.stmts[next_index];
@@ -127,6 +131,8 @@ impl Iterator for Server<'_> {
                     self.index = next_index;
                     Some(Event::Ignore)
                 }
+                FlatStmt::If { condition } => todo!(),
+                FlatStmt::EndIf => todo!(),
             },
             None => None,
         }
