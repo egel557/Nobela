@@ -35,10 +35,14 @@ text = { string }
 dialogue = { ((speaker ~ text) | (text)) ~ (eol ~ PEEK_ALL ~ choice)*}
 
 
-statement = _{ dialogue | if_stmt }
+statement = _{ dialogue | if_stmt | call | jump }
 choice = { "--" ~ text ~ ("if" ~ bool_expr)? ~ (eol ~ children)?}
 
 if_stmt = { "if" ~ bool_expr ~ ":" ~ (eol ~ children)?}
+
+call = { ("call" | jump) ~ string }
+
+jump = { "jump"}
 	
 children = _{ indent ~ statement ~ (eol ~ PEEK_ALL ~ statement)* ~ DROP}
 timeline = _{ statement ~ (NEWLINE ~ statement)* }

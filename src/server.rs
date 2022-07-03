@@ -82,6 +82,9 @@ impl Iterator for Server<'_> {
 
         match self.timeline_stack.peek() {
             Some(timeline) => {
+                let mut new_timeline_name: Option<String> = None;
+                let mut jump: Option<bool> = None;
+
                 let index = *self.index_stack.peek().unwrap();
                 let curr = &timeline[index];
                 let event = match curr {
@@ -117,6 +120,7 @@ impl Iterator for Server<'_> {
                                 }
                                 FlatStmt::If { .. } => nested_count += 1,
                                 FlatStmt::EndIf => nested_count -= 1,
+                                FlatStmt::Call { .. } => (),
                             }
                             next_index += 1;
                         }
@@ -172,6 +176,7 @@ impl Iterator for Server<'_> {
                                     | FlatStmt::Choice { .. }
                                     | FlatStmt::If { .. } => nested_count += 1,
                                     FlatStmt::EndChoice | FlatStmt::EndIf => nested_count -= 1,
+                                    FlatStmt::Call { .. } => (),
                                 }
                                 next_index += 1;
                                 next_event = &timeline[next_index];
@@ -208,6 +213,7 @@ impl Iterator for Server<'_> {
                                             break;
                                         }
                                     }
+                                    FlatStmt::Call { .. } => (),
                                 }
                                 next_index += 1;
                             }
@@ -216,12 +222,37 @@ impl Iterator for Server<'_> {
                         }
                         Some(Event::Ignore)
                     }
+                    FlatStmt::Call {
+                        jump: j,
+                        timeline_name,
+                    } => {
+                        jump = Some(*j);
+                        new_timeline_name = Some(timeline_name.to_owned());
+                        self.index_stack.set_top(index + 1);
+                        Some(Event::Ignore)
+                    }
                 };
 
                 if timeline.len() <= *self.index_stack.peek().unwrap() {
                     self.timeline_stack.pop();
                     self.index_stack.pop();
                 }
+
+                if let Some(new_timeline_name) = new_timeline_name {
+                    if jump.unwrap() {
+                        self.timeline_stack.pop();
+                        self.index_stack.pop();
+                    }
+
+                    let new_timeline = self
+                        .timelines
+                        .get(&new_timeline_name)
+                        .unwrap_or_else(|| panic!("Timeline '{new_timeline_name}' not found."));
+                    self.timeline_stack.push(new_timeline);
+                    self.index_stack.push(0);
+                }
+
+                // self.timeline_stack.push(todo!());
 
                 event
             }

@@ -102,7 +102,7 @@ fn test_flat_choice_pair() {
 
     assert_eq!(
         flat_choice_pair(
-            NobelaParser::parse(Rule::choice, r#"-- "This is a choice." only if true"#)
+            NobelaParser::parse(Rule::choice, r#"-- "This is a choice." if true"#)
                 .unwrap()
                 .next()
                 .unwrap()
@@ -187,6 +187,35 @@ fn test_flat_if_pair() {
             FlatStmt::EndDialogue,
             FlatStmt::EndIf
         ]
+    );
+}
+
+#[test]
+fn test_flat_call_pair() {
+    assert_eq!(
+        flat_call_pair(
+            NobelaParser::parse(Rule::call, r#"call "foo""#)
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        vec![FlatStmt::Call {
+            jump: false,
+            timeline_name: "foo".to_owned()
+        }]
+    );
+
+    assert_eq!(
+        flat_call_pair(
+            NobelaParser::parse(Rule::call, r#"jump "foo""#)
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        vec![FlatStmt::Call {
+            jump: true,
+            timeline_name: "foo".to_owned()
+        }]
     );
 }
 

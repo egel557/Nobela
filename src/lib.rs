@@ -31,6 +31,10 @@ pub enum FlatStmt {
         condition: String,
     },
     EndIf,
+    Call {
+        jump: bool,
+        timeline_name: String,
+    },
 }
 #[derive(Debug)]
 pub enum NestedStmt {
@@ -185,11 +189,30 @@ fn flat_if_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
     statements
 }
 
+fn flat_call_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
+    let mut jump = false;
+    let mut timeline_name = String::new();
+
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::jump => jump = true,
+            Rule::string => timeline_name = get_string_val(inner_pair),
+            _ => (),
+        }
+    }
+
+    vec![FlatStmt::Call {
+        jump,
+        timeline_name,
+    }]
+}
+
 fn flat_events_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
     let mut statements = Vec::new();
     match pair.as_rule() {
         Rule::dialogue => statements = flat_dialogue_pair(pair),
         Rule::if_stmt => statements = flat_if_pair(pair),
+        Rule::call => statements = flat_call_pair(pair),
         _ => (),
     }
 
