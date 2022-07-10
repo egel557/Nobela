@@ -2,6 +2,14 @@ use std::collections::HashMap;
 
 use evalexpr::{eval_boolean_with_context, eval_with_context, HashMapContext, Value};
 
+use nom::{
+    self,
+    bytes::complete::{tag, take_until},
+    multi::many0,
+    sequence::{delimited, preceded},
+    IResult,
+};
+
 use crate::Stmt;
 
 pub type Timeline = Vec<Stmt>;
@@ -81,6 +89,13 @@ impl<'a> Server<'a> {
     }
 }
 
+fn templates(input: &str) -> IResult<&str, Vec<&str>> {
+    many0(preceded(
+        take_until("{"),
+        delimited(tag("{"), take_until("}"), tag("}")),
+    ))(input)
+}
+
 impl Iterator for Server<'_> {
     type Item = Event;
 
@@ -104,6 +119,28 @@ impl Iterator for Server<'_> {
                         let mut choices = Vec::new();
                         let mut choice_indexes = Vec::new();
                         let mut nested_count = 0;
+                        let templates = templates(text)
+                            .unwrap()
+                            .1
+                            .iter()
+                            .map(|v| (v, eval_with_context(v, &self.context)))
+                            .filter(|v| v.1.is_ok())
+                            .map(|v| (*v.0, v.1.unwrap()))
+                            .collect::<Vec<(&str, Value)>>();
+                        let mut text = text.to_owned();
+
+                        for (variable_name, value) in templates {
+                            let string_val = match value {
+                                Value::String(v) => v,
+                                Value::Float(v) => v.to_string(),
+                                Value::Int(v) => v.to_string(),
+                                Value::Boolean(v) => v.to_string(),
+                                _ => "".to_owned(),
+                            };
+                            let new_text =
+                                &text.replace(&format!("{{{variable_name}}}"), &string_val);
+                            text = new_text.to_owned();
+                        }
 
                         loop {
                             let next_event = &timeline[next_index];
@@ -142,7 +179,7 @@ impl Iterator for Server<'_> {
                         Some(Event::Dialogue {
                             character_id: character_id.to_owned(),
                             speaker: speaker.to_owned(),
-                            text: text.to_owned(),
+                            text,
                             choices: choices
                                 .into_iter()
                                 .map(|c| {
