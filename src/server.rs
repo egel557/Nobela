@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use evalexpr::{eval_boolean_with_context, HashMapContext};
+use evalexpr::{eval_boolean_with_context, eval_with_context, HashMapContext, Value};
 
 use crate::Stmt;
 
@@ -32,6 +32,10 @@ pub enum Event {
         text: String,
         choices: Vec<(String, bool)>,
     },
+    Set {
+        variable_name: String,
+        new_value: Value,
+    },
     Ignore,
 }
 
@@ -39,7 +43,7 @@ pub struct Config<'a> {
     pub timelines: HashMap<String, &'a Timeline>,
     pub timeline_stack: Vec<&'a Timeline>,
     pub index_stack: Vec<usize>,
-    pub context: &'a HashMapContext,
+    pub context: HashMapContext,
 }
 
 pub struct Server<'a> {
@@ -47,7 +51,7 @@ pub struct Server<'a> {
     timeline_stack: Vec<&'a Timeline>,
     index_stack: Vec<usize>,
     choice_indexes: Option<Vec<usize>>,
-    context: &'a HashMapContext,
+    context: HashMapContext,
 }
 
 impl<'a> Server<'a> {
@@ -70,6 +74,10 @@ impl<'a> Server<'a> {
                 .get(choice)
                 .expect("Invalid choice index"),
         );
+    }
+
+    pub fn set_context(&mut self, context: HashMapContext) {
+        self.context = context
     }
 }
 
@@ -123,7 +131,7 @@ impl Iterator for Server<'_> {
                                 }
                                 Stmt::If { .. } => nested_count += 1,
                                 Stmt::EndIf => nested_count -= 1,
-                                Stmt::Call { .. } => (),
+                                Stmt::Call { .. } | Stmt::Set { .. } => (),
                             }
                             next_index += 1;
                         }
@@ -141,7 +149,7 @@ impl Iterator for Server<'_> {
                                     if let Stmt::Choice { text, condition } = c {
                                         let hide = match condition {
                                             Some(condition) => {
-                                                !eval_boolean_with_context(condition, self.context)
+                                                !eval_boolean_with_context(condition, &self.context)
                                                     .unwrap_or_else(|_| {
                                                         panic!("Error evaluating '{condition}'")
                                                     })
@@ -180,7 +188,7 @@ impl Iterator for Server<'_> {
                                     | Stmt::Choice { .. }
                                     | Stmt::If { .. } => nested_count += 1,
                                     Stmt::EndChoice | Stmt::EndIf => nested_count -= 1,
-                                    Stmt::Call { .. } => (),
+                                    Stmt::Call { .. } | Stmt::Set { .. } => (),
                                 }
                                 next_index += 1;
                                 next_event = &timeline[next_index];
@@ -191,7 +199,7 @@ impl Iterator for Server<'_> {
                         Some(Event::Ignore)
                     }
                     Stmt::If { condition } => {
-                        let evaluation = eval_boolean_with_context(condition, self.context)
+                        let evaluation = eval_boolean_with_context(condition, &self.context)
                             .unwrap_or_else(|_| panic!("Error evaluating '{condition}'"));
 
                         if evaluation {
@@ -215,7 +223,7 @@ impl Iterator for Server<'_> {
                                             break;
                                         }
                                     }
-                                    Stmt::Call { .. } => (),
+                                    Stmt::Call { .. } | Stmt::Set { .. } => (),
                                 }
                                 next_index += 1;
                             }
@@ -232,6 +240,22 @@ impl Iterator for Server<'_> {
                         new_timeline_name = Some(timeline_name.to_owned());
                         self.index_stack.set_top(index + 1);
                         Some(Event::Ignore)
+                    }
+                    Stmt::Set {
+                        variable_name,
+                        expression,
+                    } => {
+                        let new_value = eval_with_context(expression, &self.context)
+                            .unwrap_or_else(|_| {
+                                panic!("Something went wrong evaluating '{expression}'")
+                            });
+
+                        self.index_stack.set_top(index + 1);
+                        // Some(Event::Ignore)
+                        Some(Event::Set {
+                            variable_name: variable_name.to_owned(),
+                            new_value,
+                        })
                     }
                 };
 

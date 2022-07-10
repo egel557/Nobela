@@ -39,6 +39,10 @@ pub enum Stmt {
         jump: bool,
         timeline_name: String,
     },
+    Set {
+        variable_name: String,
+        expression: String,
+    },
 }
 
 pub struct NobelaParser {
@@ -179,12 +183,31 @@ impl NobelaParser {
         }]
     }
 
+    fn set_pair(&self, pair: Pair<Rule>) -> Vec<Stmt> {
+        let mut variable_name = String::new();
+        let mut expression = String::new();
+
+        for inner_pair in pair.into_inner() {
+            match inner_pair.as_rule() {
+                Rule::ident => variable_name = inner_pair.as_str().to_owned(),
+                Rule::expr => expression = inner_pair.as_str().to_owned(),
+                _ => (),
+            }
+        }
+
+        vec![Stmt::Set {
+            variable_name,
+            expression,
+        }]
+    }
+
     fn events_pair(&self, pair: Pair<Rule>) -> Vec<Stmt> {
         let mut statements = Vec::new();
         match pair.as_rule() {
             Rule::dialogue => statements = self.dialogue_pair(pair),
             Rule::if_stmt => statements = self.if_pair(pair),
             Rule::call => statements = self.call_pair(pair),
+            Rule::set => statements = self.set_pair(pair),
             _ => (),
         }
 

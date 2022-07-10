@@ -267,6 +267,22 @@ fn test_call_pair() {
 }
 
 #[test]
+fn test_set_pair() {
+    assert_eq!(
+        NobelaParser::new(vec![]).set_pair(
+            ScriptParser::parse(Rule::set, r#"foo = "bar""#)
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        vec![Stmt::Set {
+            variable_name: "foo".to_owned(),
+            expression: r#""bar""#.to_owned()
+        }]
+    );
+}
+
+#[test]
 fn test_parse() {
     assert_eq!(
         NobelaParser::new(vec![]).parse(r#""Hello World""#).unwrap(),

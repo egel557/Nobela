@@ -14,13 +14,15 @@ number = @{
     ~ (^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+)?
 }
 
-ident = ${ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+keyword = { "if" | "else" | "call" | "jump" | "set" }
+ident = ${ !keyword ~ !null ~ !bool ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 value = { null | bool | string | number | ident}
 
 bool_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" }
 arith_op = { "+" | "-" | "*" | "/" }
-expr = { value ~ (arith_op ~ value)+ | value }
-bool_expr = { expr ~ bool_op ~ expr | expr }
+arith_expr = { value ~ (arith_op ~ value)+ | value }
+bool_expr = { arith_expr ~ bool_op ~ arith_expr | arith_expr }
+expr = { arith_expr | bool_expr }
 
 WHITESPACE = _{ " " }
 COMMENT = _{ "//" ~ (!NEWLINE ~ ANY)* }
@@ -35,7 +37,7 @@ text = { string }
 dialogue = { (((speaker | ident) ~ text) | (text)) ~ (eol ~ PEEK_ALL ~ choice)*}
 
 
-statement = _{ dialogue | if_stmt | call | jump }
+statement = _{ dialogue | if_stmt | call | jump | set }
 choice = { "--" ~ text ~ ("if" ~ bool_expr)? ~ (eol ~ children)?}
 
 if_stmt = { "if" ~ bool_expr ~ ":" ~ (eol ~ children)?}
@@ -43,6 +45,8 @@ if_stmt = { "if" ~ bool_expr ~ ":" ~ (eol ~ children)?}
 call = { ("call" | jump) ~ string }
 
 jump = { "jump"}
+
+set = { ident ~ "=" ~ expr}
 	
 children = _{ indent ~ statement ~ (eol ~ PEEK_ALL ~ statement)* ~ DROP}
 timeline = _{ statement ~ (NEWLINE ~ statement)* }
