@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use evalexpr::{eval_boolean_with_context, HashMapContext};
 
-use crate::FlatStmt;
+use crate::Stmt;
 
-pub type Timeline = Vec<FlatStmt>;
+pub type Timeline = Vec<Stmt>;
 
 pub trait Stack<T> {
     fn peek(&self) -> Option<&T>;
@@ -27,6 +27,7 @@ impl<T> Stack<T> for Vec<T> {
 }
 pub enum Event {
     Dialogue {
+        character_id: Option<String>,
         speaker: Option<String>,
         text: String,
         choices: Vec<(String, bool)>,
@@ -45,8 +46,6 @@ pub struct Server<'a> {
     timelines: HashMap<String, &'a Timeline>,
     timeline_stack: Vec<&'a Timeline>,
     index_stack: Vec<usize>,
-    // stmts: &'a Timeline,
-    // index: usize,
     choice_indexes: Option<Vec<usize>>,
     context: &'a HashMapContext,
 }
@@ -88,7 +87,11 @@ impl Iterator for Server<'_> {
                 let index = *self.index_stack.peek().unwrap();
                 let curr = &timeline[index];
                 let event = match curr {
-                    FlatStmt::Dialogue { speaker, text } => {
+                    Stmt::Dialogue {
+                        character_id,
+                        speaker,
+                        text,
+                    } => {
                         let mut next_index = index + 1;
                         let mut choices = Vec::new();
                         let mut choice_indexes = Vec::new();
@@ -97,15 +100,15 @@ impl Iterator for Server<'_> {
                         loop {
                             let next_event = &timeline[next_index];
                             match next_event {
-                                FlatStmt::EndDialogue => {
+                                Stmt::EndDialogue => {
                                     if nested_count > 0 {
                                         nested_count -= 1
                                     } else {
                                         break;
                                     }
                                 }
-                                FlatStmt::Dialogue { .. } => nested_count += 1,
-                                FlatStmt::Choice { .. } => {
+                                Stmt::Dialogue { .. } => nested_count += 1,
+                                Stmt::Choice { .. } => {
                                     if nested_count > 0 {
                                         nested_count += 1
                                     } else {
@@ -113,14 +116,14 @@ impl Iterator for Server<'_> {
                                         choice_indexes.push(next_index.to_owned())
                                     }
                                 }
-                                FlatStmt::EndChoice => {
+                                Stmt::EndChoice => {
                                     if nested_count > 0 {
                                         nested_count -= 1
                                     }
                                 }
-                                FlatStmt::If { .. } => nested_count += 1,
-                                FlatStmt::EndIf => nested_count -= 1,
-                                FlatStmt::Call { .. } => (),
+                                Stmt::If { .. } => nested_count += 1,
+                                Stmt::EndIf => nested_count -= 1,
+                                Stmt::Call { .. } => (),
                             }
                             next_index += 1;
                         }
@@ -129,12 +132,13 @@ impl Iterator for Server<'_> {
                         self.index_stack.set_top(index + 1);
                         // self.index += 1;
                         Some(Event::Dialogue {
+                            character_id: character_id.to_owned(),
                             speaker: speaker.to_owned(),
                             text: text.to_owned(),
                             choices: choices
                                 .into_iter()
                                 .map(|c| {
-                                    if let FlatStmt::Choice { text, condition } = c {
+                                    if let Stmt::Choice { text, condition } = c {
                                         let hide = match condition {
                                             Some(condition) => {
                                                 !eval_boolean_with_context(condition, self.context)
@@ -152,31 +156,31 @@ impl Iterator for Server<'_> {
                                 .collect(),
                         })
                     }
-                    FlatStmt::Choice { .. } | FlatStmt::EndDialogue | FlatStmt::EndIf => {
+                    Stmt::Choice { .. } | Stmt::EndDialogue | Stmt::EndIf => {
                         // self.index += 1;
                         self.index_stack.set_top(index + 1);
                         Some(Event::Ignore)
                     }
-                    FlatStmt::EndChoice => {
+                    Stmt::EndChoice => {
                         let mut next_index = index + 1;
                         let mut nested_count = 0;
                         let mut next_event = &timeline[next_index];
 
-                        if matches!(next_event, FlatStmt::Choice { .. }) {
+                        if matches!(next_event, Stmt::Choice { .. }) {
                             loop {
                                 match next_event {
-                                    FlatStmt::EndDialogue => {
+                                    Stmt::EndDialogue => {
                                         if nested_count > 0 {
                                             nested_count -= 1
                                         } else {
                                             break;
                                         }
                                     }
-                                    FlatStmt::Dialogue { .. }
-                                    | FlatStmt::Choice { .. }
-                                    | FlatStmt::If { .. } => nested_count += 1,
-                                    FlatStmt::EndChoice | FlatStmt::EndIf => nested_count -= 1,
-                                    FlatStmt::Call { .. } => (),
+                                    Stmt::Dialogue { .. }
+                                    | Stmt::Choice { .. }
+                                    | Stmt::If { .. } => nested_count += 1,
+                                    Stmt::EndChoice | Stmt::EndIf => nested_count -= 1,
+                                    Stmt::Call { .. } => (),
                                 }
                                 next_index += 1;
                                 next_event = &timeline[next_index];
@@ -186,7 +190,7 @@ impl Iterator for Server<'_> {
                         // self.index = next_index;
                         Some(Event::Ignore)
                     }
-                    FlatStmt::If { condition } => {
+                    Stmt::If { condition } => {
                         let evaluation = eval_boolean_with_context(condition, self.context)
                             .unwrap_or_else(|_| panic!("Error evaluating '{condition}'"));
 
@@ -200,20 +204,18 @@ impl Iterator for Server<'_> {
                             loop {
                                 let next = &timeline[next_index];
                                 match next {
-                                    FlatStmt::Dialogue { .. }
-                                    | FlatStmt::Choice { .. }
-                                    | FlatStmt::If { .. } => nested_count += 1,
-                                    FlatStmt::EndChoice | FlatStmt::EndDialogue => {
-                                        nested_count -= 1
-                                    }
-                                    FlatStmt::EndIf => {
+                                    Stmt::Dialogue { .. }
+                                    | Stmt::Choice { .. }
+                                    | Stmt::If { .. } => nested_count += 1,
+                                    Stmt::EndChoice | Stmt::EndDialogue => nested_count -= 1,
+                                    Stmt::EndIf => {
                                         if nested_count > 0 {
                                             nested_count -= 1
                                         } else {
                                             break;
                                         }
                                     }
-                                    FlatStmt::Call { .. } => (),
+                                    Stmt::Call { .. } => (),
                                 }
                                 next_index += 1;
                             }
@@ -222,7 +224,7 @@ impl Iterator for Server<'_> {
                         }
                         Some(Event::Ignore)
                     }
-                    FlatStmt::Call {
+                    Stmt::Call {
                         jump: j,
                         timeline_name,
                     } => {

@@ -2,22 +2,26 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
+use character::Characters;
 use pest::{
     iterators::{Pair, Pairs},
     Parser, RuleType,
 };
 
+mod character;
+pub use character::Character;
 pub mod server;
 #[cfg(test)]
 pub mod test;
 
 #[derive(Parser)]
 #[grammar = "nobela.pest"]
-pub struct NobelaParser;
+pub struct ScriptParser;
 
 #[derive(Debug, PartialEq)]
-pub enum FlatStmt {
+pub enum Stmt {
     Dialogue {
+        character_id: Option<String>,
         speaker: Option<String>,
         text: String,
     },
@@ -36,185 +40,154 @@ pub enum FlatStmt {
         timeline_name: String,
     },
 }
-#[derive(Debug)]
-pub enum NestedStmt {
-    Dialogue {
-        speaker: Option<String>,
-        text: String,
-        choices: Vec<NestedStmt>,
-    },
-    Choice {
-        text: String,
-        children: Vec<NestedStmt>,
-    },
+
+pub struct NobelaParser {
+    characters: Characters,
 }
+impl NobelaParser {
+    pub fn new(characters: Characters) -> Self {
+        NobelaParser { characters }
+    }
 
-pub fn document(input: &str) -> Result<Pairs<'_, Rule>, pest::error::Error<Rule>> {
-    NobelaParser::parse(Rule::document, input)
-}
+    pub fn document<'a>(
+        &'a self,
+        input: &'a str,
+    ) -> Result<Pairs<'_, Rule>, pest::error::Error<Rule>> {
+        ScriptParser::parse(Rule::document, input)
+    }
 
-pub fn parse_nested(input: &str) -> Result<Vec<NestedStmt>, pest::error::Error<Rule>> {
-    let pairs = document(input)?;
-    let mut statements = Vec::new();
+    pub fn parse(&self, input: &str) -> Result<Vec<Stmt>, pest::error::Error<Rule>> {
+        let pairs = self.document(input)?;
+        let mut statements = Vec::new();
 
-    for pair in pairs {
-        if pair.as_rule() == Rule::dialogue {
-            statements.push(nested_dialogue_pair(pair))
+        for pair in pairs {
+            statements.append(&mut self.events_pair(pair))
         }
+
+        Ok(statements)
     }
 
-    Ok(statements)
-}
-
-pub fn parse_flat(input: &str) -> Result<Vec<FlatStmt>, pest::error::Error<Rule>> {
-    let pairs = document(input)?;
-    let mut statements = Vec::new();
-
-    for pair in pairs {
-        statements.append(&mut flat_events_pair(pair))
+    fn get_string_val<T: RuleType>(pair: Pair<T>) -> String {
+        let str = pair.as_str();
+        str[1..str.len() - 1].to_owned()
     }
 
-    Ok(statements)
-}
+    fn dialogue_pair(&self, pair: Pair<Rule>) -> Vec<Stmt> {
+        let mut statements = Vec::new();
+        let mut choices = Vec::new();
+        let mut character_id = None;
+        let mut speaker = None;
+        let mut text = String::new();
 
-fn nested_dialogue_pair(pair: Pair<Rule>) -> NestedStmt {
-    let mut choices = Vec::new();
-
-    let mut speaker = None;
-    let mut text = String::new();
-
-    for inner_pair in pair.into_inner() {
-        match inner_pair.as_rule() {
-            Rule::speaker => speaker = Some(get_string_val(inner_pair)),
-            Rule::text => text = get_string_val(inner_pair),
-            Rule::choice => {
-                choices.push(nested_choice_pair(inner_pair));
+        for inner_pair in pair.into_inner() {
+            match inner_pair.as_rule() {
+                Rule::speaker => speaker = Some(NobelaParser::get_string_val(inner_pair)),
+                Rule::text => text = NobelaParser::get_string_val(inner_pair),
+                Rule::ident => {
+                    let id = inner_pair.as_str();
+                    let character = self.characters.iter().find(|c| *c.id() == id);
+                    match character {
+                        Some(character) => {
+                            character_id = Some(id.to_owned());
+                            speaker = Some(character.display_name().to_owned());
+                        }
+                        None => {
+                            let character = self
+                                .characters
+                                .iter()
+                                .find(|c| c.get_alias_name(id).is_some())
+                                .unwrap_or_else(|| panic!("Character '{id}' not found."));
+                            character_id = Some(character.id().to_owned());
+                            speaker = Some(character.get_alias_name(id).unwrap().to_owned());
+                        }
+                    }
+                }
+                Rule::choice => {
+                    choices.append(&mut self.choice_pair(inner_pair));
+                }
+                _ => (),
             }
-            _ => (),
         }
+
+        statements.push(Stmt::Dialogue {
+            character_id,
+            speaker,
+            text,
+        });
+        statements.append(&mut choices);
+        statements.push(Stmt::EndDialogue);
+        statements
     }
 
-    NestedStmt::Dialogue {
-        speaker,
-        text,
-        choices,
-    }
-}
+    fn choice_pair(&self, pair: Pair<Rule>) -> Vec<Stmt> {
+        let mut statements = Vec::new();
+        let mut children = Vec::new();
+        let mut text = String::new();
+        let mut condition = None;
 
-fn nested_choice_pair(pair: Pair<Rule>) -> NestedStmt {
-    let mut children = Vec::new();
-    let mut text = String::new();
-
-    for inner_pair in pair.into_inner() {
-        match inner_pair.as_rule() {
-            Rule::text => text = get_string_val(inner_pair),
-            Rule::dialogue => children.push(nested_dialogue_pair(inner_pair)),
-
-            _ => (),
-        }
-    }
-
-    NestedStmt::Choice { text, children }
-}
-
-fn get_string_val<T: RuleType>(pair: Pair<T>) -> String {
-    let str = pair.as_str();
-    str[1..str.len() - 1].to_owned()
-}
-
-fn flat_dialogue_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
-    let mut statements = Vec::new();
-    let mut choices = Vec::new();
-
-    let mut speaker = None;
-    let mut text = String::new();
-
-    for inner_pair in pair.into_inner() {
-        match inner_pair.as_rule() {
-            Rule::speaker => speaker = Some(get_string_val(inner_pair)),
-            Rule::text => text = get_string_val(inner_pair),
-
-            Rule::choice => {
-                choices.append(&mut flat_choice_pair(inner_pair));
+        for inner_pair in pair.into_inner() {
+            match inner_pair.as_rule() {
+                Rule::text => text = NobelaParser::get_string_val(inner_pair),
+                Rule::bool_expr => condition = Some(inner_pair.as_str().to_owned()),
+                _ => children.append(&mut self.events_pair(inner_pair)),
             }
+        }
+
+        statements.push(Stmt::Choice { text, condition });
+
+        statements.append(&mut children);
+        statements.push(Stmt::EndChoice);
+
+        statements
+    }
+
+    fn if_pair(&self, pair: Pair<Rule>) -> Vec<Stmt> {
+        let mut statements = Vec::new();
+        let mut children = Vec::new();
+        let mut condition = String::new();
+
+        for inner_pair in pair.into_inner() {
+            match inner_pair.as_rule() {
+                Rule::bool_expr => condition = inner_pair.as_str().to_owned(),
+                _ => children.append(&mut self.events_pair(inner_pair)),
+            }
+        }
+
+        statements.push(Stmt::If { condition });
+
+        statements.append(&mut children);
+        statements.push(Stmt::EndIf);
+
+        statements
+    }
+
+    fn call_pair(&self, pair: Pair<Rule>) -> Vec<Stmt> {
+        let mut jump = false;
+        let mut timeline_name = String::new();
+
+        for inner_pair in pair.into_inner() {
+            match inner_pair.as_rule() {
+                Rule::jump => jump = true,
+                Rule::string => timeline_name = NobelaParser::get_string_val(inner_pair),
+                _ => (),
+            }
+        }
+
+        vec![Stmt::Call {
+            jump,
+            timeline_name,
+        }]
+    }
+
+    fn events_pair(&self, pair: Pair<Rule>) -> Vec<Stmt> {
+        let mut statements = Vec::new();
+        match pair.as_rule() {
+            Rule::dialogue => statements = self.dialogue_pair(pair),
+            Rule::if_stmt => statements = self.if_pair(pair),
+            Rule::call => statements = self.call_pair(pair),
             _ => (),
         }
+
+        statements
     }
-
-    statements.push(FlatStmt::Dialogue { speaker, text });
-    statements.append(&mut choices);
-    statements.push(FlatStmt::EndDialogue);
-    statements
-}
-
-fn flat_choice_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
-    let mut statements = Vec::new();
-    let mut children = Vec::new();
-    let mut text = String::new();
-    let mut condition = None;
-
-    for inner_pair in pair.into_inner() {
-        match inner_pair.as_rule() {
-            Rule::text => text = get_string_val(inner_pair),
-            Rule::bool_expr => condition = Some(inner_pair.as_str().to_owned()),
-            _ => children.append(&mut flat_events_pair(inner_pair)),
-        }
-    }
-
-    statements.push(FlatStmt::Choice { text, condition });
-
-    statements.append(&mut children);
-    statements.push(FlatStmt::EndChoice);
-
-    statements
-}
-
-fn flat_if_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
-    let mut statements = Vec::new();
-    let mut children = Vec::new();
-    let mut condition = String::new();
-
-    for inner_pair in pair.into_inner() {
-        match inner_pair.as_rule() {
-            Rule::bool_expr => condition = inner_pair.as_str().to_owned(),
-            _ => children.append(&mut flat_events_pair(inner_pair)),
-        }
-    }
-
-    statements.push(FlatStmt::If { condition });
-
-    statements.append(&mut children);
-    statements.push(FlatStmt::EndIf);
-
-    statements
-}
-
-fn flat_call_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
-    let mut jump = false;
-    let mut timeline_name = String::new();
-
-    for inner_pair in pair.into_inner() {
-        match inner_pair.as_rule() {
-            Rule::jump => jump = true,
-            Rule::string => timeline_name = get_string_val(inner_pair),
-            _ => (),
-        }
-    }
-
-    vec![FlatStmt::Call {
-        jump,
-        timeline_name,
-    }]
-}
-
-fn flat_events_pair(pair: Pair<Rule>) -> Vec<FlatStmt> {
-    let mut statements = Vec::new();
-    match pair.as_rule() {
-        Rule::dialogue => statements = flat_dialogue_pair(pair),
-        Rule::if_stmt => statements = flat_if_pair(pair),
-        Rule::call => statements = flat_call_pair(pair),
-        _ => (),
-    }
-
-    statements
 }

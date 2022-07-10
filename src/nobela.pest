@@ -32,7 +32,7 @@ indent = _{ PEEK_ALL ~ PUSH("\t") }
 speaker = { string }
 text = { string }
 
-dialogue = { ((speaker ~ text) | (text)) ~ (eol ~ PEEK_ALL ~ choice)*}
+dialogue = { (((speaker | ident) ~ text) | (text)) ~ (eol ~ PEEK_ALL ~ choice)*}
 
 
 statement = _{ dialogue | if_stmt | call | jump }
