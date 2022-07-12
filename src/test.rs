@@ -1,86 +1,159 @@
-use std::collections::HashMap;
+use crate::server::{Timeline, Timelines};
 
 use super::*;
+use pest::Parser;
+use std::collections::HashMap;
 
 #[test]
 fn test_dialogue_pair() {
     assert_eq!(
-        NobelaParser::new(vec![]).dialogue_pair(
-            ScriptParser::parse(Rule::dialogue, r#""Hello world!""#)
+        parser::Parser::new(vec![]).dialogue_pair(
+            parser::ScriptParser::parse(parser::Rule::dialogue, r#""Hello world!""#)
                 .unwrap()
                 .next()
                 .unwrap()
         ),
         vec![
-            Stmt::Dialogue {
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::new(),
                 character_id: None,
                 speaker: None,
                 text: "Hello world!".to_owned()
             },
-            Stmt::EndDialogue
+            parser::Stmt::EndDialogue
         ]
     );
 
     assert_eq!(
-        NobelaParser::new(vec![Character::new("Elira", "Elira", HashMap::new())]).dialogue_pair(
-            ScriptParser::parse(Rule::dialogue, r#"Elira "Hello world!""#)
+        parser::Parser::new(vec![Character::new(
+            "Elira",
+            "Elira",
+            HashMap::new(),
+            HashMap::from([("default".to_owned(), "test_images/elira1.png".to_owned())])
+        )])
+        .dialogue_pair(
+            parser::ScriptParser::parse(parser::Rule::dialogue, r#"Elira "Hello world!""#)
                 .unwrap()
                 .next()
                 .unwrap()
         ),
         vec![
-            Stmt::Dialogue {
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::from([(
+                    "default".to_owned(),
+                    "test_images/elira1.png".to_owned()
+                )]),
                 character_id: Some("Elira".to_owned()),
                 speaker: Some("Elira".to_owned()),
                 text: "Hello world!".to_owned()
             },
-            Stmt::EndDialogue
+            parser::Stmt::EndDialogue
         ]
     );
 
     assert_eq!(
-        NobelaParser::new(vec![Character::new(
+        parser::Parser::new(vec![Character::new(
             "Elira",
             "Elira",
-            HashMap::from([("Sheesh".to_owned(), "Sheesh Dragon".to_owned())])
+            HashMap::new(),
+            HashMap::new()
         )])
         .dialogue_pair(
-            ScriptParser::parse(Rule::dialogue, r#"Sheesh "Hello world!""#)
+            parser::ScriptParser::parse(parser::Rule::dialogue, r#"Elira "Hello world!""#)
                 .unwrap()
                 .next()
                 .unwrap()
         ),
         vec![
-            Stmt::Dialogue {
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::new(),
+                character_id: Some("Elira".to_owned()),
+                speaker: Some("Elira".to_owned()),
+                text: "Hello world!".to_owned()
+            },
+            parser::Stmt::EndDialogue
+        ]
+    );
+
+    assert_eq!(
+        parser::Parser::new(vec![Character::new(
+            "Elira",
+            "Elira",
+            HashMap::new(),
+            HashMap::new()
+        )])
+        .dialogue_pair(
+            parser::ScriptParser::parse(
+                parser::Rule::dialogue,
+                r#"Elira as "Sheesh Dragon" "Hello world!""#
+            )
+            .unwrap()
+            .next()
+            .unwrap()
+        ),
+        vec![
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::new(),
                 character_id: Some("Elira".to_owned()),
                 speaker: Some("Sheesh Dragon".to_owned()),
                 text: "Hello world!".to_owned()
             },
-            Stmt::EndDialogue
+            parser::Stmt::EndDialogue
         ]
     );
 
     assert_eq!(
-        NobelaParser::new(vec![]).dialogue_pair(
-            ScriptParser::parse(Rule::dialogue, r#""Elira" "Hello world!""#)
+        parser::Parser::new(vec![Character::new(
+            "Elira",
+            "Elira",
+            HashMap::from([("Sheesh".to_owned(), "Sheesh Dragon".to_owned())]),
+            HashMap::new()
+        )])
+        .dialogue_pair(
+            parser::ScriptParser::parse(parser::Rule::dialogue, r#"Sheesh "Hello world!""#)
                 .unwrap()
                 .next()
                 .unwrap()
         ),
         vec![
-            Stmt::Dialogue {
-                character_id: None,
-                speaker: Some("Elira".to_owned()),
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::new(),
+                character_id: Some("Elira".to_owned()),
+                speaker: Some("Sheesh Dragon".to_owned()),
                 text: "Hello world!".to_owned()
             },
-            Stmt::EndDialogue
+            parser::Stmt::EndDialogue
         ]
     );
 
     assert_eq!(
-        NobelaParser::new(vec![]).dialogue_pair(
-            ScriptParser::parse(
-                Rule::dialogue,
+        parser::Parser::new(vec![]).dialogue_pair(
+            parser::ScriptParser::parse(parser::Rule::dialogue, r#""Elira" "Hello world!""#)
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        vec![
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::new(),
+                character_id: None,
+                speaker: Some("Elira".to_owned()),
+                text: "Hello world!".to_owned()
+            },
+            parser::Stmt::EndDialogue
+        ]
+    );
+
+    assert_eq!(
+        parser::Parser::new(vec![]).dialogue_pair(
+            parser::ScriptParser::parse(
+                parser::Rule::dialogue,
                 r#""Elira" "Hello world!"
 -- "First"
 -- "Second""#
@@ -90,22 +163,24 @@ fn test_dialogue_pair() {
             .unwrap()
         ),
         vec![
-            Stmt::Dialogue {
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::new(),
                 character_id: None,
                 speaker: Some("Elira".to_owned()),
                 text: "Hello world!".to_owned()
             },
-            Stmt::Choice {
+            parser::Stmt::Choice {
                 text: "First".to_owned(),
                 condition: None,
             },
-            Stmt::EndChoice,
-            Stmt::Choice {
+            parser::Stmt::EndChoice,
+            parser::Stmt::Choice {
                 text: "Second".to_owned(),
                 condition: None,
             },
-            Stmt::EndChoice,
-            Stmt::EndDialogue
+            parser::Stmt::EndChoice,
+            parser::Stmt::EndDialogue
         ]
     );
 }
@@ -113,57 +188,57 @@ fn test_dialogue_pair() {
 #[test]
 fn test_choice_pair() {
     assert_eq!(
-        NobelaParser::new(vec![]).choice_pair(
-            ScriptParser::parse(Rule::choice, r#"-- "This is a choice.""#)
+        parser::Parser::new(vec![]).choice_pair(
+            parser::ScriptParser::parse(parser::Rule::choice, r#"-- "This is a choice.""#)
                 .unwrap()
                 .next()
                 .unwrap()
         ),
         vec![
-            Stmt::Choice {
+            parser::Stmt::Choice {
                 text: "This is a choice.".to_owned(),
                 condition: None,
             },
-            Stmt::EndChoice
+            parser::Stmt::EndChoice
         ]
     );
 
     assert_eq!(
-        NobelaParser::new(vec![]).choice_pair(
-            ScriptParser::parse(Rule::choice, r#"-- "This is a choice." if true"#)
+        parser::Parser::new(vec![]).choice_pair(
+            parser::ScriptParser::parse(parser::Rule::choice, r#"-- "This is a choice." if true"#)
                 .unwrap()
                 .next()
                 .unwrap()
         ),
         vec![
-            Stmt::Choice {
+            parser::Stmt::Choice {
                 text: "This is a choice.".to_owned(),
                 condition: Some("true".to_owned()),
             },
-            Stmt::EndChoice
+            parser::Stmt::EndChoice
         ]
     );
 
     assert_eq!(
-        NobelaParser::new(vec![]).choice_pair(
-            ScriptParser::parse(Rule::choice, r#"-- "This is a choice." if true"#)
+        parser::Parser::new(vec![]).choice_pair(
+            parser::ScriptParser::parse(parser::Rule::choice, r#"-- "This is a choice." if true"#)
                 .unwrap()
                 .next()
                 .unwrap()
         ),
         vec![
-            Stmt::Choice {
+            parser::Stmt::Choice {
                 text: "This is a choice.".to_owned(),
                 condition: Some("true".to_owned()),
             },
-            Stmt::EndChoice
+            parser::Stmt::EndChoice
         ]
     );
 
     assert_eq!(
-        NobelaParser::new(vec![]).choice_pair(
-            ScriptParser::parse(
-                Rule::choice,
+        parser::Parser::new(vec![]).choice_pair(
+            parser::ScriptParser::parse(
+                parser::Rule::choice,
                 r#"-- "This is a choice."
 	"Nested"
 	"Nested again""#
@@ -173,23 +248,27 @@ fn test_choice_pair() {
             .unwrap()
         ),
         vec![
-            Stmt::Choice {
+            parser::Stmt::Choice {
                 text: "This is a choice.".to_owned(),
                 condition: None,
             },
-            Stmt::Dialogue {
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::new(),
                 character_id: None,
                 speaker: None,
                 text: "Nested".to_owned()
             },
-            Stmt::EndDialogue,
-            Stmt::Dialogue {
+            parser::Stmt::EndDialogue,
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::new(),
                 character_id: None,
                 speaker: None,
                 text: "Nested again".to_owned()
             },
-            Stmt::EndDialogue,
-            Stmt::EndChoice
+            parser::Stmt::EndDialogue,
+            parser::Stmt::EndChoice
         ]
     );
 }
@@ -197,24 +276,24 @@ fn test_choice_pair() {
 #[test]
 fn test_if_pair() {
     assert_eq!(
-        NobelaParser::new(vec![]).if_pair(
-            ScriptParser::parse(Rule::if_stmt, r#"if 1 == 1:"#)
+        parser::Parser::new(vec![]).if_pair(
+            parser::ScriptParser::parse(parser::Rule::if_stmt, r#"if 1 == 1:"#)
                 .unwrap()
                 .next()
                 .unwrap()
         ),
         vec![
-            Stmt::If {
+            parser::Stmt::If {
                 condition: "1 == 1".to_owned()
             },
-            Stmt::EndIf
+            parser::Stmt::EndIf
         ]
     );
 
     assert_eq!(
-        NobelaParser::new(vec![]).if_pair(
-            ScriptParser::parse(
-                Rule::if_stmt,
+        parser::Parser::new(vec![]).if_pair(
+            parser::ScriptParser::parse(
+                parser::Rule::if_stmt,
                 r#"if true:
 	"Nested""#
             )
@@ -223,16 +302,18 @@ fn test_if_pair() {
             .unwrap()
         ),
         vec![
-            Stmt::If {
+            parser::Stmt::If {
                 condition: "true".to_owned()
             },
-            Stmt::Dialogue {
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::new(),
                 character_id: None,
                 speaker: None,
                 text: "Nested".to_owned()
             },
-            Stmt::EndDialogue,
-            Stmt::EndIf
+            parser::Stmt::EndDialogue,
+            parser::Stmt::EndIf
         ]
     );
 }
@@ -240,26 +321,26 @@ fn test_if_pair() {
 #[test]
 fn test_call_pair() {
     assert_eq!(
-        NobelaParser::new(vec![]).call_pair(
-            ScriptParser::parse(Rule::call, r#"call "foo""#)
+        parser::Parser::new(vec![]).call_pair(
+            parser::ScriptParser::parse(parser::Rule::call, r#"call "foo""#)
                 .unwrap()
                 .next()
                 .unwrap()
         ),
-        vec![Stmt::Call {
+        vec![parser::Stmt::Call {
             jump: false,
             timeline_name: "foo".to_owned()
         }]
     );
 
     assert_eq!(
-        NobelaParser::new(vec![]).call_pair(
-            ScriptParser::parse(Rule::call, r#"jump "foo""#)
+        parser::Parser::new(vec![]).call_pair(
+            parser::ScriptParser::parse(parser::Rule::call, r#"jump "foo""#)
                 .unwrap()
                 .next()
                 .unwrap()
         ),
-        vec![Stmt::Call {
+        vec![parser::Stmt::Call {
             jump: true,
             timeline_name: "foo".to_owned()
         }]
@@ -269,13 +350,13 @@ fn test_call_pair() {
 #[test]
 fn test_set_pair() {
     assert_eq!(
-        NobelaParser::new(vec![]).set_pair(
-            ScriptParser::parse(Rule::set, r#"foo = "bar""#)
+        parser::Parser::new(vec![]).set_pair(
+            parser::ScriptParser::parse(parser::Rule::set, r#"foo = "bar""#)
                 .unwrap()
                 .next()
                 .unwrap()
         ),
-        vec![Stmt::Set {
+        vec![parser::Stmt::Set {
             variable_name: "foo".to_owned(),
             expression: r#""bar""#.to_owned()
         }]
@@ -285,14 +366,88 @@ fn test_set_pair() {
 #[test]
 fn test_parse() {
     assert_eq!(
-        NobelaParser::new(vec![]).parse(r#""Hello World""#).unwrap(),
+        parser::Parser::new(vec![])
+            .parse(r#""Hello World""#)
+            .unwrap(),
         vec![
-            Stmt::Dialogue {
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::new(),
                 character_id: None,
                 speaker: None,
                 text: "Hello World".to_owned()
             },
-            Stmt::EndDialogue,
+            parser::Stmt::EndDialogue,
         ]
     );
 }
+
+#[test]
+fn test_parse_file() {
+    assert_eq!(
+        parser::Parser::new(vec![])
+            .parse_file("test_files/start.nobela")
+            .unwrap(),
+        vec![
+            parser::Stmt::Dialogue {
+                expression: None,
+                portraits: HashMap::new(),
+                character_id: None,
+                speaker: None,
+                text: "Hello World!".to_owned()
+            },
+            parser::Stmt::EndDialogue,
+        ]
+    );
+}
+
+#[test]
+fn test_parse_dir() {
+    assert_eq!(
+        parser::Parser::new(vec![]).parse_dir("test_files").unwrap(),
+        Timelines::from([
+            (
+                "start".to_owned(),
+                Timeline::from([
+                    parser::Stmt::Dialogue {
+                        expression: None,
+                        portraits: HashMap::new(),
+                        character_id: None,
+                        speaker: None,
+                        text: "Hello World!".to_owned()
+                    },
+                    parser::Stmt::EndDialogue
+                ])
+            ),
+            (
+                "group.nested".to_owned(),
+                Timeline::from([
+                    parser::Stmt::Dialogue {
+                        expression: None,
+                        portraits: HashMap::new(),
+                        character_id: None,
+                        speaker: None,
+                        text: "Nested Timeline".to_owned()
+                    },
+                    parser::Stmt::EndDialogue
+                ])
+            )
+        ])
+    )
+}
+
+#[test]
+fn test_characters_from_json() {
+    assert_eq!(
+        parser::characters_from_json("characters.json").unwrap(),
+        vec![Character::new(
+            "Elira",
+            "Ewiwa",
+            HashMap::new(),
+            HashMap::new()
+        )]
+    )
+}
+
+
+//TODO Create tests for server.

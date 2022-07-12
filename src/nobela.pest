@@ -34,9 +34,9 @@ indent = _{ PEEK_ALL ~ PUSH("\t") }
 speaker = { string }
 text = { string }
 
-dialogue = { (((speaker | ident) ~ text) | (text)) ~ (eol ~ PEEK_ALL ~ choice)*}
-
-
+alias = { string }
+expression = { ident } 
+dialogue = { (((speaker | ident) ~ ("as" ~ alias)? ~ expression? ~ text)  | (text)) ~ (eol ~ PEEK_ALL ~ choice)*}
 statement = _{ dialogue | if_stmt | call | jump | set }
 choice = { "--" ~ text ~ ("if" ~ bool_expr)? ~ (eol ~ children)?}
 

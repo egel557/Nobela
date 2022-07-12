@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, vec};
 
 use evalexpr::{eval_boolean_with_context, eval_with_context, HashMapContext, Value};
 
@@ -10,9 +10,10 @@ use nom::{
     IResult,
 };
 
-use crate::Stmt;
+use crate::parser::Stmt;
 
 pub type Timeline = Vec<Stmt>;
+pub type Timelines = HashMap<String, Timeline>;
 
 pub trait Stack<T> {
     fn peek(&self) -> Option<&T>;
@@ -39,6 +40,7 @@ pub enum Event {
         speaker: Option<String>,
         text: String,
         choices: Vec<(String, bool)>,
+        portrait_path: Option<String>,
     },
     Set {
         variable_name: String,
@@ -47,30 +49,62 @@ pub enum Event {
     Ignore,
 }
 
-pub struct Config<'a> {
-    pub timelines: HashMap<String, &'a Timeline>,
-    pub timeline_stack: Vec<&'a Timeline>,
-    pub index_stack: Vec<usize>,
-    pub context: HashMapContext,
-}
-
-pub struct Server<'a> {
-    timelines: HashMap<String, &'a Timeline>,
-    timeline_stack: Vec<&'a Timeline>,
+pub struct Server {
+    timelines: Timelines,
+    timeline_stack: Vec<String>,
     index_stack: Vec<usize>,
     choice_indexes: Option<Vec<usize>>,
     context: HashMapContext,
+    character_expressions: HashMap<String, String>,
 }
 
-impl<'a> Server<'a> {
-    pub fn new(config: Config<'a>) -> Self {
+impl Server {
+    pub fn new(timelines: Timelines, context: HashMapContext) -> Self {
         Server {
-            timelines: config.timelines,
-            timeline_stack: config.timeline_stack,
-            index_stack: config.index_stack,
+            timelines,
+            context,
+            timeline_stack: vec![],
+            index_stack: vec![],
             choice_indexes: None,
-            context: config.context,
+            character_expressions: HashMap::new(),
         }
+    }
+
+    pub fn check_timeline_exists(&self, timeline_name: &str) -> Result<(), String> {
+        if self.timelines.contains_key(timeline_name) {
+            Ok(())
+        } else {
+            Err(format!("Timeline '{timeline_name}' not found."))
+        }
+    }
+
+    pub fn check_index_valid(&self, timeline_name: &str, index: usize) -> Result<(), String> {
+        self.check_timeline_exists(timeline_name)?;
+        if self.timelines.get(timeline_name).unwrap().len() > index {
+            Ok(())
+        } else {
+            Err(format!(
+                "Index {index} invalid for Timeline '{timeline_name}'"
+            ))
+        }
+    }
+
+    pub fn set_stack(&mut self, timeline_stack: Vec<String>, index_stack: Vec<usize>) {
+        if timeline_stack.len() != index_stack.len() {
+            panic!("timeline_stack and index_stack must have the same length.");
+        }
+        for (i, timeline_name) in timeline_stack.iter().enumerate() {
+            self.check_index_valid(timeline_name, index_stack[i])
+                .unwrap();
+        }
+
+        self.timeline_stack = timeline_stack;
+        self.index_stack = index_stack;
+    }
+
+    pub fn set_character_expressions(&mut self, character_expressions: HashMap<String, String>) {
+        //TODO Check if keys are valid
+        self.character_expressions = character_expressions
     }
 
     pub fn choose(&mut self, choice: usize) {
@@ -87,6 +121,13 @@ impl<'a> Server<'a> {
     pub fn set_context(&mut self, context: HashMapContext) {
         self.context = context
     }
+
+    pub fn start(&mut self, timeline_name: &str, index: usize) {
+        self.check_index_valid(timeline_name, index).unwrap();
+        self.timeline_stack = vec![timeline_name.to_owned()];
+        self.index_stack = vec![index];
+        self.choice_indexes = None;
+    }
 }
 
 fn templates(input: &str) -> IResult<&str, Vec<&str>> {
@@ -96,14 +137,16 @@ fn templates(input: &str) -> IResult<&str, Vec<&str>> {
     ))(input)
 }
 
-impl Iterator for Server<'_> {
+impl Iterator for Server {
     type Item = Event;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // let increment_top_index = || self.index_stack.set_top(self.index_stack.peek().unwrap() + 1);
-
         match self.timeline_stack.peek() {
-            Some(timeline) => {
+            Some(timeline_name) => {
+                let timeline = self
+                    .timelines
+                    .get(timeline_name)
+                    .unwrap_or_else(|| panic!("Timeline '{timeline_name}' not found."));
                 let mut new_timeline_name: Option<String> = None;
                 let mut jump: Option<bool> = None;
 
@@ -114,6 +157,9 @@ impl Iterator for Server<'_> {
                         character_id,
                         speaker,
                         text,
+                        expression,
+                        portraits,
+                        // portrait_path,
                     } => {
                         let mut next_index = index + 1;
                         let mut choices = Vec::new();
@@ -128,6 +174,41 @@ impl Iterator for Server<'_> {
                             .map(|v| (*v.0, v.1.unwrap()))
                             .collect::<Vec<(&str, Value)>>();
                         let mut text = text.to_owned();
+
+                        let expression = match expression {
+                            Some(expression) => Some(expression),
+                            None => {
+                                if !self
+                                    .character_expressions
+                                    .contains_key(character_id.as_ref().unwrap())
+                                {
+                                    self.character_expressions.insert(
+                                        character_id.as_ref().unwrap().to_owned(),
+                                        "default".to_owned(),
+                                    );
+                                }
+                                self.character_expressions
+                                    .get(character_id.as_ref().unwrap())
+                            }
+                        };
+
+                        let portrait_path = match expression {
+                            Some(expression) => {
+                                let portrait_path = portraits.get(expression);
+                                match portrait_path {
+                                    Some(portrait_path) => {
+                                        let expression = expression.to_owned();
+                                        self.character_expressions.insert(
+                                            character_id.as_ref().unwrap().to_owned(),
+                                            expression,
+                                        );
+                                        Some(portrait_path.to_owned())
+                                    }
+                                    None => None,
+                                }
+                            }
+                            None => None,
+                        };
 
                         for (variable_name, value) in templates {
                             let string_val = match value {
@@ -180,6 +261,7 @@ impl Iterator for Server<'_> {
                             character_id: character_id.to_owned(),
                             speaker: speaker.to_owned(),
                             text,
+                            portrait_path,
                             choices: choices
                                 .into_iter()
                                 .map(|c| {
@@ -307,11 +389,10 @@ impl Iterator for Server<'_> {
                         self.index_stack.pop();
                     }
 
-                    let new_timeline = self
-                        .timelines
+                    self.timelines
                         .get(&new_timeline_name)
                         .unwrap_or_else(|| panic!("Timeline '{new_timeline_name}' not found."));
-                    self.timeline_stack.push(new_timeline);
+                    self.timeline_stack.push(new_timeline_name);
                     self.index_stack.push(0);
                 }
 
